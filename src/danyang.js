@@ -2,7 +2,12 @@ import * as cheerio from "cheerio";
 
 const CINEMA_CD = "000151";
 const BASE = "https://www.dtryx.com";
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+const HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+  Referer: `${BASE}/cinema/main.do?BrandCd=scinema&CinemaCd=${CINEMA_CD}`,
+};
 
 function toDateStr(offset) {
   const d = new Date();
@@ -10,18 +15,31 @@ function toDateStr(offset) {
   return d.toISOString().slice(0, 10);
 }
 
+async function fetchWithRetry(url, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url, { headers: HEADERS });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 async function fetchDaySchedule(dateStr) {
   const url = `${BASE}/cinema/showseq_list.do?BrandCd=scinema&CinemaCd=${CINEMA_CD}&PlaySDT=${dateStr}`;
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
-  if (!res.ok) throw new Error(`단양 상영시간표 조회 실패 (${dateStr}): ${res.status}`);
+  const res = await fetchWithRetry(url);
   const json = await res.json();
   return json.Showseqlist || [];
 }
 
 async function fetchMovieDetail(movieCd) {
   const url = `${BASE}/movie/view.do?MovieCd=${movieCd}`;
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
-  if (!res.ok) throw new Error(`단양 영화 상세 조회 실패 (${movieCd}): ${res.status}`);
+  const res = await fetchWithRetry(url);
   const html = await res.text();
   const $ = cheerio.load(html);
 
