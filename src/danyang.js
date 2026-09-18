@@ -15,16 +15,20 @@ function toDateStr(offset) {
   return d.toISOString().slice(0, 10);
 }
 
-async function fetchWithRetry(url, attempts = 3) {
+async function fetchWithRetry(url, attempts = 2, timeoutMs = 8000) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { headers: HEADERS });
+      const res = await fetch(url, { headers: HEADERS, signal: controller.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res;
     } catch (err) {
       lastErr = err;
       if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw lastErr;
